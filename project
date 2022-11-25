@@ -1,6 +1,5 @@
 package ev3testing2;
 
-import ev3testing2.Subsumption.SharedIRSensor;
 import lejos.hardware.Sound;
 import lejos.hardware.motor.EV3LargeRegulatedMotor;
 import lejos.hardware.motor.EV3MediumRegulatedMotor;
@@ -9,6 +8,7 @@ import lejos.hardware.port.SensorPort;
 import lejos.hardware.sensor.EV3ColorSensor;
 import lejos.hardware.sensor.EV3IRSensor;
 import lejos.hardware.sensor.EV3UltrasonicSensor;
+import lejos.hardware.sensor.NXTUltrasonicSensor;
 import lejos.robotics.SampleProvider;
 import lejos.robotics.subsumption.Arbitrator;
 import lejos.robotics.subsumption.Behavior;
@@ -58,30 +58,31 @@ class SharedIRSensor extends Thread{
 	public void run() {
 		while (true) {
 			float[] sample = new float[sp.sampleSize()];
-			iDistance = (int)sample[0];
+			iDistance = (float)sample[0];
 			System.out.println("IR Distance = " + iDistance);
 			
 		}
 	}
 }
 class SharedUltrasonicSensor extends Thread{
-	EV3UltrasonicSensor uSensor = new EV3UltrasonicSensor(SensorPort.S2); // check ports
+	NXTUltrasonicSensor uSensor = new NXTUltrasonicSensor(SensorPort.S2); // check ports
 	SampleProvider sp = uSensor.getDistanceMode();
 	public int control = 0;
 	public static int uDistance = 0;
-	public int maxIRDistance = 20; //!
+	public int maxUltrasonicDistance = 20; //!
 	
 	public void run() { // uSensor.start() sould run this i think
 		while (true) {
 			float[] sample = new float[sp.sampleSize()];
-			uDistance = (int)sample[0];
+			uDistance = (int)sample[0]; //centimeters??
 			System.out.println("IR Distance = " + uDistance);
-			
 		}
 	}
 }
 class SharedColorSensor extends Thread{
-	EV3ColorSensor cSensor = new EV3ColorSensor(SensorPort.S3);
+	EV3ColorSensor cSensor = new EV3ColorSensor(SensorPort.S2);
+	SampleProvider sp = cSensor.getColorIDMode(); // 7 = brown, , 4 = yellow, 5 = red, 2 = blue
+	
 }
 
 class MazeNavigator implements Behavior {
@@ -96,39 +97,40 @@ class MazeNavigator implements Behavior {
 	}
 	@Override
 	public boolean takeControl() {
-		return true;
+		//navigation while we don't have the ball?
+		//or, should we navigate while we don't know the exit? 
+		return !project.hasBall;
 	}
-
 	@Override
 	public void action() {
-		// TODO Auto-generated method stub
+
 		while (!_suppressed) {
-			//move forward, identify walls, plot points
-			
+			//move forward, identify walls, plot points	
+			project.rMotor.forward();
+			project.lMotor.forward();
 		}
 	}
 
 	@Override
 	public void suppress() {
 		
-		for (double i = 0; i < 5; i++) {
             Sound.beep();
     
             // We change this to approach from either direction.
             while (project.uSensor.uDistance != 30) {
-                if (uDistance < 30) { // Move forward (distance+)
-                    Motor.B.backward();
-                    Motor.C.backward();
-                } else { // Move backward (distance-)
-                    Motor.B.forward();
-                    Motor.C.forward();
+                if (project.uSensor.uDistance < 30) { // Move forward ?
+                    project.lMotor.backward();
+                    project.rMotor.backward();
+                } else { // Move backward ?
+                    project.lMotor.forward();
+                    project.rMotor.forward();
                 }
             }
             // We only get here when the distance is right, so stop the motors.
-            Motor.B.stop();
-           Motor.C.stop();    
+            project.rMotor.stop(true);
+           project.lMotor.stop(true);    
            
-        }
+           _suppressed = true;
     }
 
 	}
@@ -169,21 +171,21 @@ class GrabBall implements Behavior {
 			wallSensorDistance = (float)sample2[0];
 			//System.out.println("iteration#: " + i + "wallDistance=" +  wallSensorDistance);
 			if(ballSensorDistance <= ballDistance) {
-				rMotor.stop();
-				lMotor.stop();
+				project.rMotor.stop();
+				project.lMotor.stop();
 				System.out.println("Reached ballDistance threshold. Closing arm" + "distance found was " +ballSensorDistance);
 				//System.out.println("Batt Info(V,BA,MA): " + Battery.getVoltage() + ", " + Battery.getBatteryCurrent() + ", " + Battery.getMotorCurrent());
-				arm.rotate(-1100);
+				project.arm.rotate(-1100);
 				//arm.rotate(-900);
 				Delay.msDelay(7000);
 				//rMotor.forward();
 				//lMotor.forward();
 				//Delay.msDelay(7000);
-				rMotor.stop();
-				lMotor.stop();
-				arm.rotate(1100);
+				project.rMotor.stop();
+				project.lMotor.stop();
+				project.arm.rotate(1100);
 				//arm.rotate(900);
-				Delay.msDelay(10000);
+				Delay.msDelay(1000);
 				break;
 			}
 			//System.out.println("Iteration: " + i);
@@ -194,13 +196,13 @@ class GrabBall implements Behavior {
 
 		//rMotor.stop();
 		//lMotor.stop();
-		rMotor.close();
-		lMotor.close();
-		arm.close();
+		project.rMotor.close();
+		project.lMotor.close();
+		project.arm.close();
 	}
 	@Override
 	public boolean takeControl() {
-		// TODO Auto-generated method stub
+		// 
 		return false;
 	}
 	@Override
@@ -212,13 +214,10 @@ class GrabBall implements Behavior {
 
 class ExitMaze implements Behavior{
 
-	private boolean hasBall() {
-		return
-	}
 	@Override
 	public boolean takeControl() {
-		// TODO Auto-generated method stub
-		return hasBall();
+		// if we have the ball, exitMaze always has control
+		return project.hasBall;
 	}
 
 	@Override
