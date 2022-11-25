@@ -1,0 +1,236 @@
+package ev3testing2;
+
+import ev3testing2.Subsumption.SharedIRSensor;
+import lejos.hardware.Sound;
+import lejos.hardware.motor.EV3LargeRegulatedMotor;
+import lejos.hardware.motor.EV3MediumRegulatedMotor;
+import lejos.hardware.port.MotorPort;
+import lejos.hardware.port.SensorPort;
+import lejos.hardware.sensor.EV3ColorSensor;
+import lejos.hardware.sensor.EV3IRSensor;
+import lejos.hardware.sensor.EV3UltrasonicSensor;
+import lejos.robotics.SampleProvider;
+import lejos.robotics.subsumption.Arbitrator;
+import lejos.robotics.subsumption.Behavior;
+import lejos.utility.Delay;
+
+public class project {
+
+	static Arbitrator arby;
+	static boolean hasBall;
+	public static SharedUltrasonicSensor uSensor;
+	public static EV3LargeRegulatedMotor lMotor;
+	public static EV3LargeRegulatedMotor rMotor;
+	public static SharedIRSensor iSensor;
+	public static SharedColorSensor cSensor;
+	public static EV3MediumRegulatedMotor arm;
+	public static void main(String[] args) {
+		// TODO Auto-generated method stub
+		hasBall = false;
+		//specify behaviors inside a multi-thread program
+		//behavior 1 might be the drive forward behavior
+		//behavior 2 might avoid obstacles and react accordingly, - triggered by seeing an obstacle, behavior might backup and make a turn, orientate back on the line, and release
+		//behavior 3 might find the line again after avoiding
+		
+		EV3LargeRegulatedMotor lMotor = new EV3LargeRegulatedMotor(MotorPort.B); //! 11-25
+		EV3LargeRegulatedMotor rMotor = new EV3LargeRegulatedMotor(MotorPort.A); //check ports
+		EV3MediumRegulatedMotor arm = new EV3MediumRegulatedMotor(MotorPort.D);
+		SharedIRSensor iSensor = new SharedIRSensor();
+		SharedUltrasonicSensor uSensor = new SharedUltrasonicSensor();
+		SharedColorSensor cSensor = new SharedColorSensor();
+		
+		Behavior b1 = new MazeNavigator(rMotor, rMotor); // I think its done without parameters, just use the motors and sensors in this class: project.uSensor
+		Behavior b2 = new GrabBall(); //pass sensors/ motors as parameters? idk
+		Behavior b3 = new ExitMaze();
+		Behavior [] behave = {b1, b2, b3};
+		arby = new Arbitrator(behave);
+		arby.go();
+		
+	}
+	
+}
+class SharedIRSensor extends Thread{
+	EV3IRSensor iSensor = new EV3IRSensor(SensorPort.S1);
+	SampleProvider sp = iSensor.getDistanceMode();
+	public int control = 0;
+	public int iDistance = 0;
+	public int maxIRDistance = 20; //!
+	public void run() {
+		while (true) {
+			float[] sample = new float[sp.sampleSize()];
+			iDistance = (int)sample[0];
+			System.out.println("IR Distance = " + iDistance);
+			
+		}
+	}
+}
+class SharedUltrasonicSensor extends Thread{
+	EV3UltrasonicSensor uSensor = new EV3UltrasonicSensor(SensorPort.S2); // check ports
+	SampleProvider sp = uSensor.getDistanceMode();
+	public int control = 0;
+	public static int uDistance = 0;
+	public int maxIRDistance = 20; //!
+	
+	public void run() { // uSensor.start() sould run this i think
+		while (true) {
+			float[] sample = new float[sp.sampleSize()];
+			uDistance = (int)sample[0];
+			System.out.println("IR Distance = " + uDistance);
+			
+		}
+	}
+}
+class SharedColorSensor extends Thread{
+	EV3ColorSensor cSensor = new EV3ColorSensor(SensorPort.S3);
+}
+
+class MazeNavigator implements Behavior {
+
+	EV3LargeRegulatedMotor left;
+	EV3LargeRegulatedMotor right;
+	
+	private boolean _suppressed = false;
+	public MazeNavigator(EV3LargeRegulatedMotor left, EV3LargeRegulatedMotor right) {
+	this.left = left;
+	this.right = right;
+	}
+	@Override
+	public boolean takeControl() {
+		return true;
+	}
+
+	@Override
+	public void action() {
+		// TODO Auto-generated method stub
+		while (!_suppressed) {
+			//move forward, identify walls, plot points
+			
+		}
+	}
+
+	@Override
+	public void suppress() {
+		
+		for (double i = 0; i < 5; i++) {
+            Sound.beep();
+    
+            // We change this to approach from either direction.
+            while (project.uSensor.uDistance != 30) {
+                if (uDistance < 30) { // Move forward (distance+)
+                    Motor.B.backward();
+                    Motor.C.backward();
+                } else { // Move backward (distance-)
+                    Motor.B.forward();
+                    Motor.C.forward();
+                }
+            }
+            // We only get here when the distance is right, so stop the motors.
+            Motor.B.stop();
+           Motor.C.stop();    
+           
+        }
+    }
+
+	}
+	
+class GrabBall implements Behavior {
+
+	public static void main(String[] args) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public void action() {
+		float ballDistance = 12f; //! hard-code this as the distance from the IR sensor to the ball - atctivate claw
+		float ballSensorDistance = 0; // update this with the actual value of the ball distance
+		float wallDistance = (float) 0.1;//! hard-code this as the minimum distance to the wall to avoid collision
+		float wallSensorDistance = 0; // update with the active 		
+				
+		project.arm.setSpeed(400);
+		project.rMotor.setSpeed(150);
+		project.lMotor.setSpeed(150);
+		System.out.println("Ready to disconnect!");
+		//Delay.msDelay(6000);
+		project.rMotor.forward();
+		project.lMotor.forward();
+		//SampleProvider sp = cSensor.getColorIDMode();
+		SampleProvider sp = project.iSensor.sp; //returns a value in CM
+		SampleProvider sp2 = project.uSensor.sp; //returns a value in meters
+		boolean hasBall = false;	
+		while (!hasBall) {
+			float [] sample = new float[sp.sampleSize()];
+			float [] sample2 = new float[sp2.sampleSize()];
+			sp.fetchSample(sample, 0);
+			sp2.fetchSample(sample2, 0);
+			ballSensorDistance = (float)sample[0];
+			
+			System.out.println("ballDistance=" +  ballSensorDistance);
+			wallSensorDistance = (float)sample2[0];
+			//System.out.println("iteration#: " + i + "wallDistance=" +  wallSensorDistance);
+			if(ballSensorDistance <= ballDistance) {
+				rMotor.stop();
+				lMotor.stop();
+				System.out.println("Reached ballDistance threshold. Closing arm" + "distance found was " +ballSensorDistance);
+				//System.out.println("Batt Info(V,BA,MA): " + Battery.getVoltage() + ", " + Battery.getBatteryCurrent() + ", " + Battery.getMotorCurrent());
+				arm.rotate(-1100);
+				//arm.rotate(-900);
+				Delay.msDelay(7000);
+				//rMotor.forward();
+				//lMotor.forward();
+				//Delay.msDelay(7000);
+				rMotor.stop();
+				lMotor.stop();
+				arm.rotate(1100);
+				//arm.rotate(900);
+				Delay.msDelay(10000);
+				break;
+			}
+			//System.out.println("Iteration: " + i);
+			//System.out.println("Color: " + colorValue);
+			//System.out.println("Batt Info(V,BA,MA): " + Battery.getVoltage() + ", " + Battery.getBatteryCurrent() + ", " + Battery.getMotorCurrent());
+			Delay.msDelay(100);
+		}
+
+		//rMotor.stop();
+		//lMotor.stop();
+		rMotor.close();
+		lMotor.close();
+		arm.close();
+	}
+	@Override
+	public boolean takeControl() {
+		// TODO Auto-generated method stub
+		return false;
+	}
+	@Override
+	public void suppress() {
+		// TODO Auto-generated method stub
+		
+	}
+}
+
+class ExitMaze implements Behavior{
+
+	private boolean hasBall() {
+		return
+	}
+	@Override
+	public boolean takeControl() {
+		// TODO Auto-generated method stub
+		return hasBall();
+	}
+
+	@Override
+	public void action() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void suppress() {
+		// TODO Auto-generated method stub
+		
+	}
+	
+}
