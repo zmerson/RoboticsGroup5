@@ -16,15 +16,17 @@ import lejos.utility.Delay;
 
 public class project {
 
-	static Arbitrator arby;
+	///static Arbitrator arby;
 	static boolean hasBall;
-	public static SharedUltrasonicSensor uSensor;
 	public static EV3LargeRegulatedMotor lMotor;
 	public static EV3LargeRegulatedMotor rMotor;
+	public static SharedUltrasonicSensor uSensor;
 	public static SharedIRSensor iSensor;
 	public static SharedColorSensor cSensor;
 	public static EV3MediumRegulatedMotor arm;
+	
 	public static void main(String[] args) {
+		
 		// TODO Auto-generated method stub
 		hasBall = false;
 		//specify behaviors inside a multi-thread program
@@ -38,63 +40,100 @@ public class project {
 		SharedIRSensor iSensor = new SharedIRSensor();
 		SharedUltrasonicSensor uSensor = new SharedUltrasonicSensor();
 		SharedColorSensor cSensor = new SharedColorSensor();
-		
-		Behavior b1 = new MazeNavigator(rMotor, rMotor); // I think its done without parameters, just use the motors and sensors in this class: project.uSensor
+		iSensor.start();
+		uSensor.start();
+		cSensor.start();
+		Delay.msDelay(10000);
+		//iSensor.run();
+		//uSensor.run();
+		//cSensor.run();
+		Behavior b1 = new MazeNavigator(lMotor, rMotor, iSensor, uSensor, cSensor); // I think its done without parameters, just use the motors and sensors in this class: uSensor
+		//Behavior b2 = new how many behaviors? 
 		Behavior b2 = new GrabBall(); //pass sensors/ motors as parameters? idk
 		Behavior b3 = new ExitMaze();
-		Behavior [] behave = {b1, b2, b3};
-		arby = new Arbitrator(behave);
+		Behavior[] behave = {b1}; //{b1, b2, b3};
+		Arbitrator arby = new Arbitrator(behave);
+		System.out.println(b1);
+		System.out.println(arby);
 		arby.go();
-		
 	}
 	
 }
 class SharedIRSensor extends Thread{
-	EV3IRSensor iSensor = new EV3IRSensor(SensorPort.S1);
-	SampleProvider sp = iSensor.getDistanceMode();
+
 	public int control = 0;
-	public int iDistance = 0;
+	public float iDistance = 0;
 	public int maxIRDistance = 20; //!
 	public void run() {
+		System.out.println("hit IR: ");
+		EV3IRSensor iSensor = new EV3IRSensor(SensorPort.S1);
+		SampleProvider sp = iSensor.getDistanceMode();
 		while (true) {
+			System.out.println("running in IR: " + iDistance );
+
 			float[] sample = new float[sp.sampleSize()];
+			sp.fetchSample(sample, 0);
 			iDistance = (float)sample[0];
 			System.out.println("IR Distance = " + iDistance);
 			
 		}
+		
 	}
 }
 class SharedUltrasonicSensor extends Thread{
-	NXTUltrasonicSensor uSensor = new NXTUltrasonicSensor(SensorPort.S2); // check ports
-	SampleProvider sp = uSensor.getDistanceMode();
+
 	public int control = 0;
-	public static int uDistance = 0;
+	public static float uDistance = 0;
 	public int maxUltrasonicDistance = 20; //!
 	
 	public void run() { // uSensor.start() sould run this i think
+		System.out.println("running in ULtraSonic: ");
+		NXTUltrasonicSensor uSensor = new NXTUltrasonicSensor(SensorPort.S3); // check ports
+		SampleProvider sp = uSensor.getDistanceMode();
 		while (true) {
 			float[] sample = new float[sp.sampleSize()];
-			uDistance = (int)sample[0]; //centimeters??
-			System.out.println("IR Distance = " + uDistance);
+			sp.fetchSample(sample, 0);
+			uDistance = (float)sample[0]; //centimeters??
+			System.out.println("Ultrasonic Distance = " + uDistance);
 		}
 	}
 }
 class SharedColorSensor extends Thread{
-	EV3ColorSensor cSensor = new EV3ColorSensor(SensorPort.S2);
-	SampleProvider sp = cSensor.getColorIDMode(); // 7 = brown, , 4 = yellow, 5 = red, 2 = blue
 	
+	
+	
+	 // 7 = brown, , 4 = yellow, 5 = red, 2 = blue
+	public static int cColor = 0;
+	public void run() {
+		EV3ColorSensor cSensor = new EV3ColorSensor(SensorPort.S2);
+		SampleProvider sp = cSensor.getColorIDMode();
+		while (true) {
+			float[] sample = new float[sp.sampleSize()];
+			sp.fetchSample(sample, 0);
+			cColor = (int)sample[0];
+			System.out.println("color found: " + cColor);
+		}
+	}
 }
 
 class MazeNavigator implements Behavior {
 
 	EV3LargeRegulatedMotor left;
 	EV3LargeRegulatedMotor right;
+	SharedUltrasonicSensor uSensor;
+	SharedIRSensor iSensor;
+	SharedColorSensor cSensor;
+	public MazeNavigator(EV3LargeRegulatedMotor lMotor,EV3LargeRegulatedMotor rMotor,SharedIRSensor iSensor,SharedUltrasonicSensor uSensor,SharedColorSensor cSensor)
+		{
+		this.left = lMotor;
+		this.right = rMotor;
+		this.iSensor =  iSensor;
+		this.uSensor = uSensor;
+		this.cSensor = cSensor;
+	}
 	
 	private boolean _suppressed = false;
-	public MazeNavigator(EV3LargeRegulatedMotor left, EV3LargeRegulatedMotor right) {
-	this.left = left;
-	this.right = right;
-	}
+
 	@Override
 	public boolean takeControl() {
 		//navigation while we don't have the ball?
@@ -103,12 +142,66 @@ class MazeNavigator implements Behavior {
 	}
 	@Override
 	public void action() {
-
+System.out.println("asdfqwerty");
+		left.setSpeed(100);
+		right.setSpeed(100);
+	
 		while (!_suppressed) {
+			System.out.println("while loop 1: Isensor: " + iSensor.iDistance + " uSensorDistance: " + uSensor.uDistance );
+			
+			if (iSensor.iDistance < 15 && iSensor.iDistance > 5) {
+				right.forward();
+				left.forward();
+			} else if (iSensor.iDistance < 5) {
+				left.stop(true);
+				right.stop(true); // too close to the wall,
+				Delay.msDelay(500);			//slightly adjust to the left
+				while (iSensor.iDistance < 5) {
+					System.out.println("while loop 2: iSsensor: " + iSensor.iDistance + " uSensorDistance: " + uSensor.uDistance );
+					right.forward();
+					left.backward();
+				}
+			}
+			else if (iSensor.iDistance > 200000) {
+				right.forward();
+				left.forward();
+			}
+			else {// T-intersection or 4 way -> right turn
+				Delay.msDelay(15000);
+				left.stop(true);
+				right.stop(true);
+				left.forward();
+				right.backward();
+			}
 			//move forward, identify walls, plot points	
-			project.rMotor.forward();
-			project.lMotor.forward();
-		}
+			
+			// TODO: CHANGE uDistance value blow
+			 if (uSensor.uDistance < .05) {// T- intersection, corner, or dead-end
+				 right.stop(true); //turn left
+				 left.stop(true);
+				 
+				 // TODO : change iDistance value 7.5
+				 if (iSensor.iDistance < 15) { //
+					while(uSensor.uDistance < .07) {
+						System.out.println("while loop 3: iSensor: " + iSensor.iDistance + " uSensorDistance: " + uSensor.uDistance );
+
+						right.forward();
+						left.backward();
+						System.out.println("while loop 4: Isensor: " + iSensor.iDistance + " uSensorDistance: " + uSensor.uDistance );
+
+					}
+				 } else {
+					 while(uSensor.uDistance < .07) {
+							System.out.println("while loop 5: Isensor: " + iSensor.iDistance + " uSensorDistance: " + uSensor.uDistance );
+
+							right.backward();
+							left.forward();
+							System.out.println("while loop 6: Isensor: " + iSensor.iDistance + " uSensorDistance: " + uSensor.uDistance );
+
+					 }
+				 }
+			 }
+		} 
 	}
 
 	@Override
@@ -117,31 +210,27 @@ class MazeNavigator implements Behavior {
             Sound.beep();
     
             // We change this to approach from either direction.
-            while (project.uSensor.uDistance != 30) {
-                if (project.uSensor.uDistance < 30) { // Move forward ?
-                    project.lMotor.backward();
-                    project.rMotor.backward();
-                } else { // Move backward ?
-                    project.lMotor.forward();
-                    project.rMotor.forward();
-                }
-            }
+         
+                if (cSensor.cColor == 2) { // 2 == blue so stop                     
             // We only get here when the distance is right, so stop the motors.
-            project.rMotor.stop(true);
-           project.lMotor.stop(true);    
-           
-           _suppressed = true;
-    }
+                		right.stop(true);
+                		left.stop(true);    
+           				_suppressed = true;
+                }
 
 	}
 	
 class GrabBall implements Behavior {
 
-	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-
+	EV3LargeRegulatedMotor right;
+	EV3LargeRegulatedMotor left;
+	EV3MediumRegulatedMotor arm;
+	public GrabBall(EV3LargeRegulatedMotor right, EV3LargeRegulatedMotor left, EV3MediumRegulatedMotor arm) {
+		//add sensors later please
+		this.right = right;
+		this.left = left;
+		this.arm = arm;
 	}
-
 	@Override
 	public void action() {
 		float ballDistance = 12f; //! hard-code this as the distance from the IR sensor to the ball - atctivate claw
@@ -149,41 +238,43 @@ class GrabBall implements Behavior {
 		float wallDistance = (float) 0.1;//! hard-code this as the minimum distance to the wall to avoid collision
 		float wallSensorDistance = 0; // update with the active 		
 				
-		project.arm.setSpeed(400);
-		project.rMotor.setSpeed(150);
-		project.lMotor.setSpeed(150);
+		arm.setSpeed(400);
+		right.setSpeed(150);
+		left.setSpeed(150);
 		System.out.println("Ready to disconnect!");
 		//Delay.msDelay(6000);
-		project.rMotor.forward();
-		project.lMotor.forward();
+		right.forward();
+		left.forward();
 		//SampleProvider sp = cSensor.getColorIDMode();
-		SampleProvider sp = project.iSensor.sp; //returns a value in CM
-		SampleProvider sp2 = project.uSensor.sp; //returns a value in meters
+		SampleProvider sp = iSensor.sp; //returns a value in CM
+		SampleProvider sp2 = uSensor.sp; //returns a value in meters
+		SampleProvider sp3 = cSensor.sp;
 		boolean hasBall = false;	
 		while (!hasBall) {
 			float [] sample = new float[sp.sampleSize()];
 			float [] sample2 = new float[sp2.sampleSize()];
+			float [] sample3 = new float[sp3.sampleSize()];
 			sp.fetchSample(sample, 0);
 			sp2.fetchSample(sample2, 0);
-			ballSensorDistance = (float)sample[0];
+			ballSensorDistance = (float)sample3[0];
 			
 			System.out.println("ballDistance=" +  ballSensorDistance);
 			wallSensorDistance = (float)sample2[0];
 			//System.out.println("iteration#: " + i + "wallDistance=" +  wallSensorDistance);
 			if(ballSensorDistance <= ballDistance) {
-				project.rMotor.stop();
-				project.lMotor.stop();
+				right.stop();
+				left.stop();
 				System.out.println("Reached ballDistance threshold. Closing arm" + "distance found was " +ballSensorDistance);
 				//System.out.println("Batt Info(V,BA,MA): " + Battery.getVoltage() + ", " + Battery.getBatteryCurrent() + ", " + Battery.getMotorCurrent());
-				project.arm.rotate(-1100);
+				arm.rotate(-1100);
 				//arm.rotate(-900);
 				Delay.msDelay(7000);
 				//rMotor.forward();
 				//lMotor.forward();
 				//Delay.msDelay(7000);
-				project.rMotor.stop();
-				project.lMotor.stop();
-				project.arm.rotate(1100);
+				right.stop();
+				left.stop();
+				arm.rotate(1100);
 				//arm.rotate(900);
 				Delay.msDelay(1000);
 				break;
@@ -196,9 +287,9 @@ class GrabBall implements Behavior {
 
 		//rMotor.stop();
 		//lMotor.stop();
-		project.rMotor.close();
-		project.lMotor.close();
-		project.arm.close();
+		right.close();
+		left.close();
+		arm.close();
 	}
 	@Override
 	public boolean takeControl() {
@@ -228,8 +319,9 @@ class ExitMaze implements Behavior{
 
 	@Override
 	public void suppress() {
-		// TODO Auto-generated method stub
+		return;
+	}
 		
 	}
-	
 }
+
